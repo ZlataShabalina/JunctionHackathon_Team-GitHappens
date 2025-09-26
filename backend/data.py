@@ -1,9 +1,25 @@
 import random
 import requests
+from typing import Dict, Any, List
+from utils.store import store  # keep if needed for static fallback or logging
 
-
+# API Key for route service
 ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImNkZTVjMWZiMDViMDQzZDE4MmExMDZjMGFiMWE5ZGExIiwiaCI6Im11cm11cjY0In0="
 
+# -------------------------------
+# Static thresholds (still useful)
+# -------------------------------
+THRESHOLDS: Dict[str, Dict[str, Dict[str, float]]] = {
+    "crew-1": {"stress": {"warn": 60.0, "crit": 80.0}, "usage": {"warn": 70.0, "crit": 90.0}},
+    "crew-2": {"stress": {"warn": 55.0, "crit": 75.0}, "usage": {"warn": 65.0, "crit": 85.0}},
+}
+
+def get_thresholds():
+    return THRESHOLDS
+
+# -------------------------------
+# Dynamic weather + zone status
+# -------------------------------
 def random_weather():
     return {
         "heatwave": random.random() < 0.4,
@@ -13,18 +29,13 @@ def random_weather():
         "demandSpike": random.random() < 0.3
     }
 
-def calculate_risk_score(f):
+def calculate_risk_score(factors: Dict[str, bool]) -> float:
     score = 0
-    if f["heatwave"]:
-        score += 0.3
-    if f["winterStorm"]:
-        score += 0.3
-    if f["floodRisk"]:
-        score += 0.2
-    if f["agingInfra"]:
-        score += 0.4
-    if f["demandSpike"]:
-        score += 0.3
+    if factors["heatwave"]: score += 0.3
+    if factors["winterStorm"]: score += 0.3
+    if factors["floodRisk"]: score += 0.2
+    if factors["agingInfra"]: score += 0.4
+    if factors["demandSpike"]: score += 0.3
     return min(score, 1)
 
 def get_zones():
@@ -36,10 +47,10 @@ def get_zones():
         score = calculate_risk_score(stress)
         status = "stable" if score <= 0.3 else "moderate" if score <= 0.6 else "high"
         coords = [
-            [base_lat + i*0.005, base_lng - 0.005],
-            [base_lat + i*0.005, base_lng + 0.005],
-            [base_lat + i*0.005 + 0.005, base_lng + 0.005],
-            [base_lat + i*0.005 + 0.005, base_lng - 0.005]
+            [base_lat + i * 0.005, base_lng - 0.005],
+            [base_lat + i * 0.005, base_lng + 0.005],
+            [base_lat + i * 0.005 + 0.005, base_lng + 0.005],
+            [base_lat + i * 0.005 + 0.005, base_lng - 0.005]
         ]
         zones.append({
             "id": f"Z00{i+1}",
@@ -50,13 +61,26 @@ def get_zones():
             "stressFactors": stress
         })
     return zones
-def decode_polyline(polyline_str):
+
+# -------------------------------
+# Dynamic asset positions
+# -------------------------------
+def get_assets():
+    return [
+        {"id": "crew-1", "name": "Field Team Alpha", "lat": 63.0950, "lng": 21.6100, "status": "available"},
+        {"id": "crew-2", "name": "Team Bravo", "lat": 63.1000, "lng": 21.6200, "status": "responding"},
+        {"id": "crew-3", "name": "Inspection Unit C", "lat": 63.0900, "lng": 21.6050, "status": "available"}
+    ]
+
+# -------------------------------
+# Polyline decoding (for routes)
+# -------------------------------
+def decode_polyline(polyline_str: str):
     index, lat, lng, coordinates = 0, 0, 0, []
     length = len(polyline_str)
 
     while index < length:
         result, shift = 0, 0
-
         while True:
             b = ord(polyline_str[index]) - 63
             index += 1
@@ -64,7 +88,6 @@ def decode_polyline(polyline_str):
             shift += 5
             if b < 0x20:
                 break
-
         delta_lat = ~(result >> 1) if (result & 1) else (result >> 1)
         lat += delta_lat
 
@@ -76,20 +99,16 @@ def decode_polyline(polyline_str):
             shift += 5
             if b < 0x20:
                 break
-
         delta_lng = ~(result >> 1) if (result & 1) else (result >> 1)
         lng += delta_lng
 
         coordinates.append((lng * 1e-5, lat * 1e-5))
-
     return coordinates
-def get_assets():
-    return [
-        {"id": "crew-1", "name": "Field Team Alpha", "lat": 63.0950, "lng": 21.6100, "status": "available"},
-        {"id": "crew-2", "name": "Team Bravo", "lat": 63.1000, "lng": 21.6200, "status": "responding"},
-        {"id": "crew-3", "name": "Inspection Unit C", "lat": 63.0900, "lng": 21.6050, "status": "available"}
-    ]
-def get_route_coordinates(start, end):
+
+# -------------------------------
+# Route generator
+# -------------------------------
+def get_route_coordinates(start: List[float], end: List[float]):
     url = "https://api.openrouteservice.org/v2/directions/driving-car"
     headers = {
         "Authorization": ORS_API_KEY,
@@ -100,26 +119,29 @@ def get_route_coordinates(start, end):
         "instructions": False
     }
 
-    resp = requests.post(url, json=body, headers=headers)
-    data = resp.json()
+    try:
+        resp = requests.post(url, json=body, headers=headers)
+        data = resp.json()
 
-    if "routes" not in data or len(data["routes"]) == 0:
-        print("OpenRouteService returned error or no route:", data)
+        if "routes" not in data or len(data["routes"]) == 0:
+            print("OpenRouteService returned error or no route:", data)
+            return []
+
+        geometry = data["routes"][0]["geometry"]
+        coords = decode_polyline(geometry)
+
+        return [
+            {"timestamp": i, "lat": coord[1], "lng": coord[0]}
+            for i, coord in enumerate(coords)
+        ]
+    except Exception as e:
+        print("Error fetching route:", e)
         return []
 
-    geometry = data["routes"][0]["geometry"]
-    coords = decode_polyline(geometry)
-
-    return [
-        {"timestamp": i, "lat": coord[1], "lng": coord[0]}  # Note: coords are (lng, lat)
-        for i, coord in enumerate(coords)
-    ]
-
-
-
-
-def get_history(asset_id):
-    # Define start and end points for each crew (lng, lat)
+# -------------------------------
+# History (route) per crew
+# -------------------------------
+def get_history(asset_id: str):
     routes = {
         "crew-2": ([21.6100, 63.0950], [21.6300, 63.1050]),
         "crew-1": ([21.6000, 63.0930], [21.6200, 63.0980]),
@@ -127,9 +149,8 @@ def get_history(asset_id):
     }
     start, end = routes.get(asset_id, ([21.6100, 63.0950], [21.6300, 63.1050]))
     route = get_route_coordinates(start, end)
-    
+
     if not route:
-        # Fallback: simple straight-line history if route fails
         base_lat = 63.095
         base_lng = 21.615
         return [
