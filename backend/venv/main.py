@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from data import get_assets, get_zones, get_history
 
 app = FastAPI()
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
