@@ -1,24 +1,20 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from data import get_assets, get_zones, get_history
+from routes import public, webhooks, stream
 
-app = FastAPI()
+app = FastAPI(title="Device Backend", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # tighten later
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/assets")
-def assets():
-    return get_assets()
+app.include_router(public.router)
+app.include_router(webhooks.router)
+app.include_router(stream.router)
 
-@app.get("/zones")
-def zones():
-    return get_zones()
-
-@app.get("/history/{asset_id}")
-def history(asset_id: str):
-    return get_history(asset_id)
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
