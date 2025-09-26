@@ -26,3 +26,13 @@ git add .                         // Add all changed files
 git rebase --continue             // Continue to next commit
 ```
 You may get a new set of conflicted files, repeat as you did above until you get a successful rebase message
+
+#### Merging
+When merging from your branch to dev, and also from dev to main, use **Pull Requests**
+
+When you make a pull request, check that you are merging from your personal branch to dev
+
+There is no need to receive approval, as long as the branches are correct, just complete the pull request
+
+### In case of troubles
+Just ask Matti, I can at least try to help 😊
