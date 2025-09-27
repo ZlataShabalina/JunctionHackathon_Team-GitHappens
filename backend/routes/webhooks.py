@@ -38,4 +38,3 @@ async def device_webhook(request: Request):
         # or: await broker.publish("risk", jsonable_encoder(risk))
 
     return {"ok": True}
-
