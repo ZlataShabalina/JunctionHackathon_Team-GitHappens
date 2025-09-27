@@ -4,7 +4,7 @@ from typing import Dict, Any, List
 from utils.store import store  # keep if needed for static fallback or logging
 
 # API Key for route service
-ORS_API_KEY = ""
+ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImNkZTVjMWZiMDViMDQzZDE4MmExMDZjMGFiMWE5ZGExIiwiaCI6Im11cm11cjY0In0="
 
 # -------------------------------
 # Static thresholds (still useful)
@@ -38,19 +38,54 @@ def calculate_risk_score(factors: Dict[str, bool]) -> float:
     if factors["demandSpike"]: score += 0.3
     return min(score, 1)
 
+# -------------------------------
+# Dynamic asset positions in rural areas
+# -------------------------------
+def get_assets():
+    return [
+        {
+            "id": "crew-1",
+            "name": "Field Team Alpha",
+            "lat": 60.2000,  # just north of Helsinki, Finland
+            "lng": 24.9000,
+            "status": "available"
+        },
+        {
+            "id": "crew-2",
+            "name": "Team Bravo",
+            "lat": 59.9500,  # just north of Oslo, Norway
+            "lng": 10.7000,
+            "status": "responding"
+        },
+        {
+            "id": "crew-3",
+            "name": "Inspection Unit C",
+            "lat": 59.3500,  # rural outskirts of Stockholm, Sweden
+            "lng": 17.9500,
+            "status": "available"
+        }
+    ]
+
+# -------------------------------
+# Zones around the assets
+# -------------------------------
 def get_zones():
+    base_coords = [
+        (60.2000, 24.9000),  # Finland field area
+        (59.9500, 10.7000),  # Norway field area
+        (59.3500, 17.9500)   # Sweden field area
+    ]
     zones = []
-    base_lat = 63.0951
-    base_lng = 21.6152
-    for i in range(3):
+
+    for i, (base_lat, base_lng) in enumerate(base_coords):
         stress = random_weather()
         score = calculate_risk_score(stress)
         status = "stable" if score <= 0.3 else "moderate" if score <= 0.6 else "high"
         coords = [
-            [base_lat + i * 0.005, base_lng - 0.005],
-            [base_lat + i * 0.005, base_lng + 0.005],
-            [base_lat + i * 0.005 + 0.005, base_lng + 0.005],
-            [base_lat + i * 0.005 + 0.005, base_lng - 0.005]
+            [base_lat - 0.01, base_lng - 0.01],
+            [base_lat - 0.01, base_lng + 0.01],
+            [base_lat + 0.01, base_lng + 0.01],
+            [base_lat + 0.01, base_lng - 0.01]
         ]
         zones.append({
             "id": f"Z00{i+1}",
@@ -60,17 +95,8 @@ def get_zones():
             "riskScore": score,
             "stressFactors": stress
         })
-    return zones
 
-# -------------------------------
-# Dynamic asset positions
-# -------------------------------
-def get_assets():
-    return [
-        {"id": "crew-1", "name": "Field Team Alpha", "lat": 63.0950, "lng": 21.6100, "status": "available"},
-        {"id": "crew-2", "name": "Team Bravo", "lat": 63.1000, "lng": 21.6200, "status": "responding"},
-        {"id": "crew-3", "name": "Inspection Unit C", "lat": 63.0900, "lng": 21.6050, "status": "available"}
-    ]
+    return zones
 
 # -------------------------------
 # Polyline decoding (for routes)
