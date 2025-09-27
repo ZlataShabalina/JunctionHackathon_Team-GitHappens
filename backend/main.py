@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from db import engine, Base
-from routers import sites, assets, workorders, notices, public  # notices optional
+from routers import sites, assets, workorders, notices, public, crew  # notices optional
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -19,6 +19,7 @@ app.include_router(assets.router)
 app.include_router(workorders.router)
 app.include_router(notices.router)   # remove if not used
 app.include_router(public.router)
+app.include_router(crew.router)
 
 @app.on_event("startup")
 async def on_startup():

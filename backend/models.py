@@ -7,6 +7,34 @@ from db import Base
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
+
+# --- NEW ---
+class Crew(Base):
+    __tablename__ = "crew"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # e.g. "alex" or email
+    name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    role: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # technician, supervisor
+    status: Mapped[str] = mapped_column(String(20), default="available")   # available|on_duty|off_duty|on_break
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    last_lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    meta: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+
+    positions: Mapped[List["CrewPosition"]] = relationship(back_populates="crew", cascade="all, delete-orphan")
+
+class CrewPosition(Base):
+    __tablename__ = "crew_positions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    crew_id: Mapped[str] = mapped_column(String(64), ForeignKey("crew.id", ondelete="CASCADE"), index=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+    speed: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # km/h
+    heading: Mapped[Optional[float]] = mapped_column(Float, nullable=True) # degrees 0..359
+
+    crew: Mapped["Crew"] = relationship(back_populates="positions")
+
+
 # -------- Sites --------
 class Site(Base):
     __tablename__ = "sites"

@@ -9,4 +9,6 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./powerpulse.db"
     CORS_ORIGINS: List[str] = ["*"]  # use JSON array in .env
 
+    MOBILE_API_KEY: str = "dev-mobile-key"
+
 settings = Settings()

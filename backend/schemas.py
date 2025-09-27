@@ -2,6 +2,46 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
+
+# --- NEW ---
+class CrewCreate(BaseModel):
+    id: str
+    name: Optional[str] = None
+    role: Optional[str] = None
+    status: Optional[str] = "available"
+    meta: Optional[Dict[str, Any]] = None
+
+class CrewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    name: Optional[str]
+    role: Optional[str]
+    status: str
+    last_seen_at: Optional[datetime]
+    last_lat: Optional[float]
+    last_lon: Optional[float]
+    meta: Optional[Dict[str, Any]] = None
+
+class CrewPositionIn(BaseModel):
+    crew_id: str
+    lat: float
+    lon: float
+    speed: Optional[float] = None
+    heading: Optional[float] = None
+    status: Optional[str] = None   # optional status update (e.g., on_duty)
+
+class CrewTrackPoint(BaseModel):
+    ts: datetime
+    lat: float
+    lon: float
+    speed: Optional[float] = None
+    heading: Optional[float] = None
+
+class CrewTrackOut(BaseModel):
+    crew: CrewOut
+    points: List[CrewTrackPoint]
+
+
 # ----- Sites -----
 class SiteCreate(BaseModel):
     id: str

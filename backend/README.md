@@ -6,6 +6,18 @@ This document is for the **frontend team**. It explains how to call the backend,
 
 ---
 
+## How to run
+
+1) uvicorn main:app --reload --port 8000
+
+2) python simulate_crew.py \
+  --base http://localhost:8000 \
+  --key dev-mobile-key \
+  --crews alex:Alex,sara:Sara,lee:Lee \
+  --follow-workorders
+
+---
+
 ## Base URL
 
 Local development (default):
