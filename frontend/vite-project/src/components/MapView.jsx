@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Polygon, Marker, Popup } from "react-leaflet";
+import React from "react";
+import { MapContainer, TileLayer, Polygon, Marker, Popup, Polyline } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -15,207 +15,198 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 });
 
-const ZONE_COLORS = {
-  high: "#ff0000",
-  moderate: "#ffa500",
-  stable: "#008000",
+// Custom truck icon for different statuses
+const createTruckIcon = (status) => {
+  const colors = {
+    moving: '#00ff00',
+    parked: '#ffaa00',
+    maintenance: '#ff0000',
+    returning: '#0088ff'
+  };
+  
+  return L.divIcon({
+    className: 'custom-truck-icon',
+    html: `<div style="
+      background: ${colors[status] || '#666'};
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    ">🚛</div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12]
+  });
 };
 
-// Helper to generate random polygon around a point
-const randomPolygon = (lat, lng, size = 0.01) => [
-  [lat, lng],
-  [lat + size * Math.random(), lng + size * Math.random()],
-  [lat + size * Math.random(), lng - size * Math.random()],
-  [lat - size * Math.random(), lng - size * Math.random()],
-  [lat - size * Math.random(), lng + size * Math.random()],
-];
-
-const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImNkZTVjMWZiMDViMDQzZDE4MmExMDZjMGFiMWE5ZGExIiwiaCI6Im11cm11cjY0In0="; // replace with your key
-
-// Fetch route from ORS
-const fetchRoute = async (start, end) => {
-  const url = "https://api.openrouteservice.org/v2/directions/driving-car";
-  try {
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: ORS_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ coordinates: [start, end], instructions: false }),
-    });
-    const data = await resp.json();
-    if (!data.routes || data.routes.length === 0) return [];
-    const coords = decodePolyline(data.routes[0].geometry);
-    return coords.map((c, i) => ({ lat: c[1], lng: c[0] }));
-  } catch (err) {
-    console.error("ORS route error:", err);
-    return [];
-  }
+// Site icon based on status
+const createSiteIcon = (type, status) => {
+  const colors = {
+    stable: '#00aa00',
+    warning: '#ffaa00',
+    critical: '#ff0000',
+    maintenance: '#0088ff'
+  };
+  
+  const icons = {
+    substation: '⚡',
+    tower: '🗼',
+    plant: '🏭'
+  };
+  
+  return L.divIcon({
+    className: 'custom-site-icon',
+    html: `<div style="
+      background: ${colors[status] || '#666'};
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      border: 2px solid white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    ">${icons[type] || '⚡'}</div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
+  });
 };
 
-// Decode polyline (from ORS)
-const decodePolyline = (str) => {
-  let index = 0, lat = 0, lng = 0, coordinates = [];
-  while (index < str.length) {
-    let result = 0, shift = 0, b;
-    do {
-      b = str.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    let deltaLat = result & 1 ? ~(result >> 1) : result >> 1;
-    lat += deltaLat;
-
-    result = 0; shift = 0;
-    do {
-      b = str.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    let deltaLng = result & 1 ? ~(result >> 1) : result >> 1;
-    lng += deltaLng;
-
-    coordinates.push([lng * 1e-5, lat * 1e-5]);
-  }
-  return coordinates;
+const getZoneColor = (status) => {
+  const colors = {
+    critical: '#ff0000',
+    warning: '#ffaa00',
+    medium: '#ffaa00',
+    high: '#ff0000'
+  };
+  return colors[status] || '#00aa00';
 };
 
-function MapView() {
-  const [zones, setZones] = useState([]);
-  const [assets, setAssets] = useState([]);
-  const [teams, setTeams] = useState([]);
-  const [timestamp, setTimestamp] = useState(0);
+const formatETA = (minutes) => {
+  if (!minutes) return 'N/A';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${hours}h ${mins}m`;
+};
 
-  // Animate vehicles
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTimestamp((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Initialize assets, zones, teams
-  useEffect(() => {
-    const init = async () => {
-      const exampleAssets = [
-        { id: "fin-asset-1", name: "Finland Substation A", lat: 64.1, lng: 25.0 },
-        { id: "fin-asset-2", name: "Finland Tower B", lat: 64.05, lng: 25.05 },
-        { id: "nor-asset-1", name: "Norway Substation A", lat: 60.5, lng: 11.0 },
-        { id: "nor-asset-2", name: "Norway Tower B", lat: 60.55, lng: 11.05 },
-        { id: "swe-asset-1", name: "Sweden Substation A", lat: 59.3, lng: 18.0 },
-        { id: "swe-asset-2", name: "Sweden Tower B", lat: 59.35, lng: 18.05 },
-      ];
-      setAssets(exampleAssets);
-
-      const exampleZones = exampleAssets.map((a, idx) => ({
-        id: `zone-${idx}`,
-        coords: randomPolygon(a.lat, a.lng, 0.02),
-        status: ["stable", "moderate", "high"][Math.floor(Math.random() * 3)],
-        riskScore: Math.random(),
-      }));
-      setZones(exampleZones);
-
-      const exampleTeams = [];
-      const countries = [
-        { code: "fin", baseLat: 64.0, baseLng: 25.0 },
-        { code: "nor", baseLat: 60.5, baseLng: 11.0 },
-        { code: "swe", baseLat: 59.3, baseLng: 18.0 },
-      ];
-
-      for (const c of countries) {
-        for (let i = 1; i <= 5; i++) {
-          const moving = Math.random() < 0.6;
-          const targetAsset = moving
-            ? exampleAssets.filter((a) => a.id.startsWith(c.code))[Math.floor(Math.random() * 2)]
-            : null;
-          let route = [];
-          if (moving && targetAsset) {
-            // Fetch ORS route
-            route = await fetchRoute([c.baseLng, c.baseLat], [targetAsset.lng, targetAsset.lat]);
-          }
-
-          exampleTeams.push({
-            id: `${c.code}-team-${i}`,
-            name: `${c.code.toUpperCase()} Team ${i}`,
-            lat: c.baseLat,
-            lng: c.baseLng,
-            status: moving ? "moving" : "parked",
-            targetAsset,
-            route,
-            eta: moving ? `${Math.floor(Math.random() * 30) + 10} min` : null,
-          });
-        }
-      }
-      setTeams(exampleTeams);
-    };
-    init();
-  }, []);
-
+function MapView({ sites = [], trucks = [], zones = [], onTruckSelect }) {
   return (
-    <MapContainer center={[62, 15]} zoom={5} scrollWheelZoom style={{ height: "100vh", width: "100%" }}>
+    <MapContainer
+      center={[62.5, 15]}
+      zoom={5}
+      style={{ height: '100%', width: '100%' }}
+      zoomControl={false}
+    >
       <TileLayer
-        attribution="&copy; OpenStreetMap contributors"
+        attribution='&copy; OpenStreetMap contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      {zones.map((zone) => (
-        <Polygon
-          key={zone.id}
-          positions={zone.coords}
-          pathOptions={{ color: ZONE_COLORS[zone.status] ?? "#008000", fillOpacity: 0.4 }}
-        >
-          <Popup>
-            <div>
-              <strong>Zone ID:</strong> {zone.id}
-              <br />
-              <strong>Status:</strong> {zone.status}
-              <br />
-              <strong>Risk Score:</strong> {zone.riskScore.toFixed(2)}
-            </div>
-          </Popup>
-        </Polygon>
-      ))}
-
-      {assets.map((asset) => (
-        <Marker key={asset.id} position={[asset.lat, asset.lng]}>
-          <Popup>
-            <div>
-              <strong>{asset.name}</strong>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-
-      {teams.map((team) => {
-        const currentPos =
-          team.status === "moving" && team.route.length > 0
-            ? team.route[timestamp % team.route.length]
-            : { lat: team.lat, lng: team.lng };
+      {/* Service Zones */}
+      {zones.map(zone => {
+        const bounds = [
+          [zone.center[0] - zone.radius, zone.center[1] - zone.radius],
+          [zone.center[0] + zone.radius, zone.center[1] + zone.radius],
+          [zone.center[0] + zone.radius, zone.center[1] - zone.radius],
+          [zone.center[0] - zone.radius, zone.center[1] - zone.radius]
+        ];
+        
         return (
-          <Marker
-            key={team.id}
-            position={[currentPos.lat, currentPos.lng]}
-            icon={L.divIcon({ className: "custom-icon", html: "🚚" })}
+          <Polygon
+            key={zone.id}
+            positions={bounds}
+            pathOptions={{
+              color: getZoneColor(zone.status),
+              fillColor: getZoneColor(zone.status),
+              fillOpacity: 0.2,
+              weight: 2
+            }}
           >
             <Popup>
               <div>
-                <strong>{team.name}</strong>
-                <br />
-                Status: {team.status}
-                <br />
-                {team.status === "moving" && team.targetAsset && (
-                  <>
-                    Target: {team.targetAsset.name}
-                    <br />
-                    ETA: {team.eta}
-                  </>
-                )}
+                <strong>Service Zone</strong><br />
+                Priority: {zone.priority}<br />
+                Status: {zone.status}
               </div>
             </Popup>
-          </Marker>
+          </Polygon>
         );
       })}
+
+      {/* Sites */}
+      {sites
+  .filter(site => site.lat != null && site.lon != null)
+  .map(site => (
+    <Marker
+      key={site.id}
+      position={[site.lat, site.lon]}
+      icon={createSiteIcon(site.meta?.type || 'substation', site.meta?.status || 'stable')}
+    >
+      <Popup>
+        <div>
+          <strong>{site.name}</strong><br />
+          ID: {site.id}<br />
+          Type: {site.meta?.type || 'substation'}<br />
+          Status: {site.meta?.status || 'stable'}<br />
+          Country: {site.meta?.country || 'Unknown'}
+        </div>
+      </Popup>
+    </Marker>
+))}
+
+
+      {/* Truck Routes */}
+      {trucks
+        .filter(truck => truck.route && truck.route.length > 0 && truck.status === 'moving')
+        .map(truck => (
+          <Polyline
+            key={`route-${truck.id}`}
+            positions={truck.route.map(point => [point.lat, point.lon])}
+            pathOptions={{
+              color: '#00ff00',
+              weight: 3,
+              opacity: 0.7,
+              dashArray: '5, 10'
+            }}
+          />
+        ))}
+
+      {/* Trucks */}
+      {trucks
+  .filter(truck => truck.lat != null && truck.lon != null)
+  .map(truck => (
+    <Marker
+      key={truck.id}
+      position={[truck.lat, truck.lon]}
+      icon={createTruckIcon(truck.status)}
+      eventHandlers={{
+        click: () => onTruckSelect && onTruckSelect(truck)
+      }}
+    >
+      <Popup>
+        <div className="min-w-[200px]">
+          <strong>{truck.name}</strong><br />
+          Status: {truck.status}<br />
+          Crew: {truck.crew} members<br />
+          {truck.targetSite && (
+            <>
+              Target: {truck.targetSite.name}<br />
+              ETA: {formatETA(truck.eta)}<br />
+            </>
+          )}
+          Fuel: {truck.fuel}%<br />
+          <small>Last update: {truck.lastUpdate?.toLocaleTimeString()}</small>
+        </div>
+      </Popup>
+    </Marker>
+))}
+
     </MapContainer>
   );
 }
