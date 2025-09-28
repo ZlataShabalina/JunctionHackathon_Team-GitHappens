@@ -1,157 +1,87 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import MapView from "./components/MapView";
 import StatusHUD from "./components/StatusHUD";
 import TruckDetailsPanel from "./components/TruckDetailsPanel";
 import AlertsPanel from "./components/AlertsPanel";
 import LoginForm from "./components/LoginForm";
+import SitePanel from "./components/SitePanel";
 import "./App.css";
-import { getRouteCoordinates } from "./components/routes.js";
 
+import { getHealth, listSites, listCrew } from "../services/api";
 
-import axios from "axios";
+// ---- derive UI bits for zones/alerts/HUD
+function deriveZonesFromSites(sites) {
+  return (sites || [])
+    .filter((s) => s?.meta?.status === "critical" || s?.meta?.status === "warning")
+    .map((s) => ({
+      id: `zone-${s.id}`,
+      siteId: s.id,
+      center: [s.lat, s.lon],                          // [lat, lon]
+      radius: s.meta?.status === "critical" ? 600 : 300, // meters
+      status: s.meta?.status || "stable",
+      priority: s.meta?.status === "critical" ? "high" : "medium",
+    }));
+}
+function deriveAlertsFromSites(sites) {
+  return (sites || [])
+    .filter((s) => s?.meta?.status === "critical" || s?.meta?.status === "warning")
+    .map((s) => ({ id: `alert-${s.id}`, type: s.meta?.status, message: `${s.name} requires attention!`, timestamp: new Date() }));
+}
+function deriveStatsFromCrew(crew) {
+  const list = crew || [];
+  const active = list.filter((c) => c.status === "on_duty" || c.status === "assigned").length;
+  const parked = list.filter((c) => c.status === "on_break" || c.status === "off_duty").length;
+  const maintenance = list.filter((c) => c.status === "in_progress").length;
+  return { active, parked, maintenance };
+}
 
-function App() {
+export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [sites, setSites] = useState([]);
-  const [trucks, setTrucks] = useState([]);
-  const [zones, setZones] = useState([]);
   const [isConnected, setIsConnected] = useState(true);
-  const [selectedTruck, setSelectedTruck] = useState(null);
+
+  const [zones, setZones] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [stats, setStats] = useState({ active: 0, parked: 0, maintenance: 0 });
 
-  const BASE_URL = "http://localhost:8000";
+  const [selectedTruck, setSelectedTruck] = useState(null);
+  const [selectedSiteId, setSelectedSiteId] = useState(null);
 
-  // Fetch sites and assets from backend
-  const fetchBackendData = async () => {
+  const refresh = useCallback(async () => {
     try {
-      const [sitesRes, assetsRes] = await Promise.all([
-        axios.get(`${BASE_URL}/sites`),
-        axios.get(`${BASE_URL}/assets`)
-      ]);
-
-      const fetchedSites = sitesRes.data;
-      const fetchedAssets = assetsRes.data.items;
-
-      setSites(fetchedSites);
-      
-      const mappedTrucks = await Promise.all(fetchedAssets
-  .filter(a => ["mobile_sub", "vehicle"].includes(a.type))
-  .map(async a => {
-    const truck = {
-      id: a.id,
-      name: a.name || a.id,
-      lat: a.meta?.lat || 0,
-      lon: a.meta?.lon || 0,
-      status: a.status === "fault" ? "maintenance" : "moving",
-      crew: a.meta?.crew || 1,
-      fuel: a.meta?.fuel || 100,
-      route: a.meta?.route || [],
-      eta: a.meta?.eta || null,
-      targetSite: fetchedSites.find(s => s.id === a.site_id),
-      lastUpdate: a.last_seen_at ? new Date(a.last_seen_at) : new Date(),
-      start: a.meta?.start || [a.meta?.lon || 0, a.meta?.lat || 0],
-      end: a.meta?.end || [a.meta?.lon || 0, a.meta?.lat || 0]
-    };
-
-    // Fetch route if moving
-    if (truck.status === "moving") {
-      truck.route = await getRouteCoordinates(truck.start, truck.end);
-    }
-
-    return truck;
-  })
-);
-
-setTrucks(mappedTrucks);
-
-
-      // Create zones for critical/warning sites
-      const criticalZones = fetchedSites
-        .filter(site => site.meta?.status === 'critical' || site.meta?.status === 'warning')
-        .map(site => ({
-          id: `zone-${site.id}`,
-          siteId: site.id,
-          center: [site.lat, site.lon],
-          radius: 0.1,
-          status: site.meta?.status || 'stable',
-          priority: site.meta?.status === 'critical' ? 'high' : 'medium'
-        }));
-
-      setZones(criticalZones);
-
-      // Generate alerts for critical/warning sites
-      const newAlerts = fetchedSites
-        .filter(site => site.meta?.status === 'critical' || site.meta?.status === 'warning')
-        .map(site => ({
-          id: `alert-${site.id}`,
-          type: site.meta?.status,
-          message: `${site.name} requires attention!`,
-          timestamp: new Date()
-        }));
-      setAlerts(newAlerts);
-
-      // Update stats
-      setStats({
-        active: mappedTrucks.filter(t => t.status === "moving").length,
-        parked: mappedTrucks.filter(t => t.status === "parked").length,
-        maintenance: mappedTrucks.filter(t => t.status === "maintenance").length
-      });
-
+      await getHealth().catch(() => {});
+      const [sites, crew] = await Promise.all([listSites({}), listCrew({})]);
+      setZones(deriveZonesFromSites(sites));
+      setAlerts(deriveAlertsFromSites(sites));
+      setStats(deriveStatsFromCrew(crew));
+      setIsConnected(true);
     } catch (err) {
-      console.error("Error fetching backend data:", err);
+      console.error("Refresh failed:", err);
       setIsConnected(false);
     }
-  };
+  }, []);
 
-  // Initialize data when authenticated
-  useEffect(() => {
-    if (!isAuthenticated) return;
+  useEffect(() => { if (isAuthenticated) refresh(); }, [isAuthenticated, refresh]);
+  useEffect(() => { if (!isAuthenticated) return; const t = setInterval(refresh, 10000); return () => clearInterval(t); }, [isAuthenticated, refresh]);
 
-    fetchBackendData();
-  }, [isAuthenticated]);
-
-  // Refresh data every 10 seconds
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const interval = setInterval(fetchBackendData, 10000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated]);
-
-  if (!isAuthenticated) {
-    return <LoginForm onLogin={() => setIsAuthenticated(true)} />;
-  }
+  if (!isAuthenticated) return <LoginForm onLogin={() => setIsAuthenticated(true)} />;
 
   return (
     <div className="app">
       <StatusHUD isConnected={isConnected} stats={stats} />
-
       <AlertsPanel alerts={alerts} />
 
-      {selectedTruck && (
-        <TruckDetailsPanel
-          truck={selectedTruck}
-          onClose={() => setSelectedTruck(null)}
-        />
-      )}
+      {selectedTruck && <TruckDetailsPanel truck={selectedTruck} onClose={() => setSelectedTruck(null)} />}
+      {selectedSiteId && <SitePanel siteId={selectedSiteId} onClose={() => setSelectedSiteId(null)} />}
 
       <div className="map-container">
         <MapView
-          sites={sites}
-          trucks={trucks}
           zones={zones}
           onTruckSelect={setSelectedTruck}
+          onSiteSelect={(site) => setSelectedSiteId(site.id)}
         />
       </div>
 
-      {!isConnected && (
-        <div className="connection-banner">
-          Connection Lost - Displaying Last Known Positions
-        </div>
-      )}
+      {!isConnected && <div className="connection-banner">Connection Lost - Displaying Last Known Positions</div>}
     </div>
   );
 }
-
-export default App;

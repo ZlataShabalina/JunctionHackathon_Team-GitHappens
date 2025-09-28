@@ -47,3 +47,13 @@ export const calculateStats = (trucks) => {
     maintenance: trucks.filter(t => t.status === 'maintenance').length
   };
 };
+
+// src/components/tracking.js
+export function trackToLineString(track) {
+  if (!track || !track.points || !track.points.length) return null;
+  return {
+    type: "Feature",
+    geometry: { type: "LineString", coordinates: track.points.map(p => [p.lon, p.lat]) },
+    properties: { crew_id: track.crew.id },
+  };
+}
