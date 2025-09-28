@@ -1,9 +1,10 @@
 import { Stack } from "expo-router";
 import { StatusBar } from 'expo-status-bar';
+import { AuthProvider } from "./auth/AuthContext";
 
 export default function RootLayout() {
   return (
-    <>
+    <AuthProvider>
       <StatusBar style="dark" />
       <Stack
         screenOptions={{
@@ -38,16 +39,16 @@ export default function RootLayout() {
           }} 
         />
         <Stack.Screen 
-          name="tasks" 
+          name="workorders" 
           options={{ 
-            title: 'Maintenance Tasks',
+            title: 'Work Orders',
             headerShown: true 
           }} 
         />
         <Stack.Screen 
-          name="taskpage" 
+          name="workorder-details" 
           options={{ 
-            title: 'Task Details',
+            title: 'Work Order Details',
             headerShown: true 
           }} 
         />
@@ -66,6 +67,6 @@ export default function RootLayout() {
           }} 
         />
       </Stack>
-    </>
+    </AuthProvider>
   );
 }
