@@ -6,6 +6,10 @@ import AlertsPanel from "./components/AlertsPanel";
 import LoginForm from "./components/LoginForm";
 import SitePanel from "./components/SitePanel";
 import "./App.css";
+import NewSiteModal from "./components/NewSiteModal";
+import AddCrewModal from "./components/AddCrewModal";
+
+import { getHealth, listSites, listCrew } from "../services/api";
 
 import { getHealth, listSites, listCrew } from "../services/api";
 
@@ -46,6 +50,8 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
   const [focusSiteId, setFocusSiteId] = useState(null);
+  const [showNewSite, setShowNewSite] = useState(false);
+const [showNewCrew, setShowNewCrew] = useState(false);
 
   const [zones, setZones] = useState([]);
   const [alerts, setAlerts] = useState([]);
@@ -90,6 +96,13 @@ export default function App() {
   onFocusHandled={() => setFocusSiteId(null)}
 />
       </div>
+
+      <NewSiteModal open={showNewSite} onClose={() => setShowNewSite(false)} onCreated={refresh} />
+<AddCrewModal open={showNewCrew} onClose={() => setShowNewCrew(false)} onCreated={refresh} />
+
+<button className="fab-add-site" onClick={() => setShowNewSite(true)}>＋ Site</button>
+<button className="fab-add-crew" onClick={() => setShowNewCrew(true)}>＋ Crew</button>
+
 
       {!isConnected && <div className="connection-banner">Connection Lost - Displaying Last Known Positions</div>}
     </div>
