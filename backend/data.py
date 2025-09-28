@@ -1,10 +1,13 @@
 import random
+import os
 import requests
+from dotenv import load_dotenv
 from typing import Dict, Any, List
 from utils.store import store  # keep if needed for static fallback or logging
 
+load_dotenv()
 # API Key for route service
-ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImNkZTVjMWZiMDViMDQzZDE4MmExMDZjMGFiMWE5ZGExIiwiaCI6Im11cm11cjY0In0="
+ORS_API_KEY= os.getenv("ORS_API_KEY")
 
 # -------------------------------
 # Static thresholds (still useful)

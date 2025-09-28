@@ -30,7 +30,8 @@ const randomPolygon = (lat, lng, size = 0.01) => [
   [lat - size * Math.random(), lng + size * Math.random()],
 ];
 
-const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImNkZTVjMWZiMDViMDQzZDE4MmExMDZjMGFiMWE5ZGExIiwiaCI6Im11cm11cjY0In0="; // replace with your key
+console.log(import.meta.env)
+const ORS_API_KEY = import.meta.env.VITE_ORS_API_KEY
 
 // Fetch route from ORS
 const fetchRoute = async (start, end) => {
@@ -131,7 +132,6 @@ function MapView() {
             : null;
           let route = [];
           if (moving && targetAsset) {
-            // Fetch ORS route
             route = await fetchRoute([c.baseLng, c.baseLat], [targetAsset.lng, targetAsset.lat]);
           }
 
@@ -154,38 +154,40 @@ function MapView() {
 
   return (
     <MapContainer center={[62, 15]} zoom={5} scrollWheelZoom style={{ height: "100vh", width: "100%" }}>
+      <button></button>
       <TileLayer
         attribution="&copy; OpenStreetMap contributors"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      {zones.map((zone) => (
-        <Polygon
-          key={zone.id}
-          positions={zone.coords}
-          pathOptions={{ color: ZONE_COLORS[zone.status] ?? "#008000", fillOpacity: 0.4 }}
-        >
-          <Popup>
-            <div>
-              <strong>Zone ID:</strong> {zone.id}
-              <br />
-              <strong>Status:</strong> {zone.status}
-              <br />
-              <strong>Risk Score:</strong> {zone.riskScore.toFixed(2)}
-            </div>
-          </Popup>
-        </Polygon>
-      ))}
+     {zones.map((zone) => (
+  <Polygon
+    key={zone.id}
+    positions={zone.coords}
+    pathOptions={{ color: ZONE_COLORS[zone.status] ?? "#008000", fillOpacity: 0.4 }}
+  >
+    <Popup>
+      <div style={{ fontSize: "26px", lineHeight: "1.4em" }}>
+        <strong>Zone ID:</strong> {zone.id}
+        <br />
+        <strong>Status:</strong> {zone.status}
+        <br />
+        <strong>Risk Score:</strong> {zone.riskScore.toFixed(2)}
+      </div>
+    </Popup>
+  </Polygon>
+))}
 
-      {assets.map((asset) => (
-        <Marker key={asset.id} position={[asset.lat, asset.lng]}>
-          <Popup>
-            <div>
-              <strong>{asset.name}</strong>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
+
+     {assets.map((asset) => (
+  <Marker key={asset.id} position={[asset.lat, asset.lng]}>
+    <Popup>
+      <div style={{ fontSize: "26px", lineHeight: "1.4em" }}>
+        <strong>{asset.name}</strong>
+      </div>
+    </Popup>
+  </Marker>
+))}
 
       {teams.map((team) => {
         const currentPos =
@@ -196,10 +198,16 @@ function MapView() {
           <Marker
             key={team.id}
             position={[currentPos.lat, currentPos.lng]}
-            icon={L.divIcon({ className: "custom-icon", html: "🚚" })}
+            icon={L.divIcon({
+              className: "custom-icon",
+              html: `<div style="font-size: 32px;">🚚</div>`,
+              iconSize: [32, 32], 
+              iconAnchor: [16, 16], 
+            })}
+
           >
-            <Popup>
-              <div>
+           <Popup>
+              <div style={{ fontSize: "26px", lineHeight: "1.4em" }}>
                 <strong>{team.name}</strong>
                 <br />
                 Status: {team.status}
@@ -213,6 +221,7 @@ function MapView() {
                 )}
               </div>
             </Popup>
+
           </Marker>
         );
       })}
