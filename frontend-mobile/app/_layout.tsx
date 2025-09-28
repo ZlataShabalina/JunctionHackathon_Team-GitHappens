@@ -38,16 +38,16 @@ export default function RootLayout() {
           }} 
         />
         <Stack.Screen 
-          name="tasks" 
+          name="workorders" 
           options={{ 
-            title: 'Maintenance Tasks',
+            title: 'Work Orders',
             headerShown: true 
           }} 
         />
         <Stack.Screen 
-          name="taskpage" 
+          name="workorder-details" 
           options={{ 
-            title: 'Task Details',
+            title: 'Work Order Details',
             headerShown: true 
           }} 
         />
