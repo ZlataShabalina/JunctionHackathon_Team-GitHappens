@@ -5,6 +5,8 @@ import TruckDetailsPanel from "./components/TruckDetailsPanel";
 import AlertsPanel from "./components/AlertsPanel";
 import LoginForm from "./components/LoginForm";
 import "./App.css";
+import { getRouteCoordinates } from "./components/routes.js";
+
 
 import axios from "axios";
 
@@ -33,23 +35,36 @@ function App() {
 
       setSites(fetchedSites);
       
-      const mappedTrucks = fetchedAssets
-        .filter(a => ["mobile_sub", "vehicle"].includes(a.type))
-        .map(a => ({
-          id: a.id,
-          name: a.name || a.id,
-          lat: a.meta?.lat || 0,
-          lng: a.meta?.lon || 0,
-          status: a.status === "fault" ? "maintenance" : "moving",
-          crew: a.meta?.crew || 1,
-          fuel: a.meta?.fuel || 100,
-          route: a.meta?.route || [],
-          eta: a.meta?.eta || null,
-          targetSite: fetchedSites.find(s => s.id === a.site_id),
-          lastUpdate: a.last_seen_at ? new Date(a.last_seen_at) : new Date()
-        }));
+      const mappedTrucks = await Promise.all(fetchedAssets
+  .filter(a => ["mobile_sub", "vehicle"].includes(a.type))
+  .map(async a => {
+    const truck = {
+      id: a.id,
+      name: a.name || a.id,
+      lat: a.meta?.lat || 0,
+      lon: a.meta?.lon || 0,
+      status: a.status === "fault" ? "maintenance" : "moving",
+      crew: a.meta?.crew || 1,
+      fuel: a.meta?.fuel || 100,
+      route: a.meta?.route || [],
+      eta: a.meta?.eta || null,
+      targetSite: fetchedSites.find(s => s.id === a.site_id),
+      lastUpdate: a.last_seen_at ? new Date(a.last_seen_at) : new Date(),
+      start: a.meta?.start || [a.meta?.lon || 0, a.meta?.lat || 0],
+      end: a.meta?.end || [a.meta?.lon || 0, a.meta?.lat || 0]
+    };
 
-      setTrucks(mappedTrucks);
+    // Fetch route if moving
+    if (truck.status === "moving") {
+      truck.route = await getRouteCoordinates(truck.start, truck.end);
+    }
+
+    return truck;
+  })
+);
+
+setTrucks(mappedTrucks);
+
 
       // Create zones for critical/warning sites
       const criticalZones = fetchedSites

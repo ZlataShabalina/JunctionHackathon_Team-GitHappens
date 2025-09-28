@@ -29,3 +29,7 @@ async def on_startup():
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok", "env": settings.APP_ENV}
+
+@app.get("/history/{asset_id}")
+def history(asset_id: str):
+    return get_history(asset_id)

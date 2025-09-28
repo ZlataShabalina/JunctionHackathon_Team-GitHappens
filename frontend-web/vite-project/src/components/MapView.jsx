@@ -95,6 +95,31 @@ const formatETA = (minutes) => {
   return `${hours}h ${mins}m`;
 };
 
+const trucks = [
+  {
+    id: "crew-1",
+    name: "Field Team Alpha",
+    lat: 63.095,   // latitude
+    lon: 21.610,   // longitude
+    status: "moving",
+    start: [21.6100, 63.0950], // [lng, lat] for ORS only
+    end: [21.6200, 63.0980],   // [lng, lat] for ORS only
+    crew: 3,
+    fuel: 90
+  },
+  {
+    id: "crew-2",
+    name: "Team Bravo",
+    lat: 63.100,
+    lon: 21.620,
+    status: "parked",
+    crew: 3,
+    fuel: 75
+  }
+];
+
+
+
 function MapView({ sites = [], trucks = [], zones = [], onTruckSelect }) {
   return (
     <MapContainer
