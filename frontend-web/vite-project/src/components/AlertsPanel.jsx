@@ -12,23 +12,21 @@ const AlertsPanel = ({ alerts }) => {
     return icons[type] || '⚠️';
   };
 
-  return (
+  return  (
     <div className="alerts-panel">
-      <h3 className="alerts-title">
-        🚨 Active Alerts
-      </h3>
+      <h3 className="alerts-title">🚨 Active Alerts</h3>
       <div className="alerts-list">
         {alerts.slice(0, 3).map(alert => {
-          // Ensure timestamp is a Date object
-          const alertTime = alert.timestamp ? new Date(alert.timestamp) : new Date();
+          const t = alert.timestamp ? new Date(alert.timestamp) : new Date();
           return (
-            <div key={alert.id} className={`alert-item ${alert.type}`}>
-              <span className="alert-icon">{getAlertIcon(alert.type)}</span>
+            <div key={alert.id}
+                 className={`alert-item ${alert.type}`}
+                 onClick={() => onSelect && onSelect(alert)}
+                 style={{ cursor: "pointer" }}>
+              <span className="alert-icon">{alert.type === "critical" ? "🚨" : "⚠️"}</span>
               <div className="alert-content">
                 <div className="alert-message">{alert.message}</div>
-                <div className="alert-time">
-                  {alertTime.toLocaleTimeString()}
-                </div>
+                <div className="alert-time">{t.toLocaleTimeString()}</div>
               </div>
             </div>
           );

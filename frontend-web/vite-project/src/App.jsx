@@ -24,9 +24,16 @@ function deriveZonesFromSites(sites) {
 }
 function deriveAlertsFromSites(sites) {
   return (sites || [])
-    .filter((s) => s?.meta?.status === "critical" || s?.meta?.status === "warning")
-    .map((s) => ({ id: `alert-${s.id}`, type: s.meta?.status, message: `${s.name} requires attention!`, timestamp: new Date() }));
+    .filter(s => s?.meta?.status === "critical" || s?.meta?.status === "warning")
+    .map(s => ({
+      id: `alert-${s.id}`,
+      siteId: s.id,                 // <— add this
+      type: s.meta?.status,
+      message: `${s.name} requires attention!`,
+      timestamp: new Date()
+    }));
 }
+
 function deriveStatsFromCrew(crew) {
   const list = crew || [];
   const active = list.filter((c) => c.status === "on_duty" || c.status === "assigned").length;
@@ -38,6 +45,7 @@ function deriveStatsFromCrew(crew) {
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
+  const [focusSiteId, setFocusSiteId] = useState(null);
 
   const [zones, setZones] = useState([]);
   const [alerts, setAlerts] = useState([]);
@@ -68,17 +76,19 @@ export default function App() {
   return (
     <div className="app">
       <StatusHUD isConnected={isConnected} stats={stats} />
-      <AlertsPanel alerts={alerts} />
+      <AlertsPanel alerts={alerts} onSelect={(a) => setFocusSiteId(a.siteId)} />
 
       {selectedTruck && <TruckDetailsPanel truck={selectedTruck} onClose={() => setSelectedTruck(null)} />}
       {selectedSiteId && <SitePanel siteId={selectedSiteId} onClose={() => setSelectedSiteId(null)} />}
 
       <div className="map-container">
         <MapView
-          zones={zones}
-          onTruckSelect={setSelectedTruck}
-          onSiteSelect={(site) => setSelectedSiteId(site.id)}
-        />
+  zones={zones}
+  onTruckSelect={setSelectedTruck}
+  onSiteSelect={(site) => setSelectedSiteId(site.id)}
+  focusSiteId={focusSiteId}
+  onFocusHandled={() => setFocusSiteId(null)}
+/>
       </div>
 
       {!isConnected && <div className="connection-banner">Connection Lost - Displaying Last Known Positions</div>}

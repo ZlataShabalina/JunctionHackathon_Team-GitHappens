@@ -77,9 +77,11 @@ function ViewportWatcher({ onBbox }) {
 }
 
 // ---- main
-export default function MapView({ zones = [], onTruckSelect, onSiteSelect }) {
+export default function MapView({ zones = [], onTruckSelect, onSiteSelect, focusSiteId, onFocusHandled }) {
   const [bbox, setBbox] = useState(null);
   const [selectedCrewId, setSelectedCrewId] = useState(null);
+  const mapRef = useRef(null);
+  //whenCreated={(map) => { mapRef.current = map; setBbox(boundsToBbox(map.getBounds())); }}
 
   const sites = usePoll((signal) => (bbox ? listSites({ bbox, signal }) : Promise.resolve([])), [JSON.stringify(bbox)], 15000);
   const crew  = usePoll((signal) => (bbox ? listCrew ({ bbox, signal }) : Promise.resolve([])), [JSON.stringify(bbox)], 6000);
@@ -92,6 +94,15 @@ export default function MapView({ zones = [], onTruckSelect, onSiteSelect }) {
   const siteMarkers = useMemo(() => (sites || []).filter((s) => s.lat != null && s.lon != null), [sites]);
   const crewMarkers = useMemo(() => (crew  || []).filter((c) => c.last_lat != null && c.last_lon != null), [crew]);
   const trackLatLngs = useMemo(() => (track?.points?.length ? track.points.map((p) => [p.lat, p.lon]) : []), [track]);
+
+  useEffect(() => {
+    if (!focusSiteId || !mapRef.current || !sites) return;
+    const target = (sites || []).find(s => s.id === focusSiteId);
+    if (target && target.lat != null && target.lon != null) {
+      mapRef.current.flyTo([target.lat, target.lon], 14, { duration: 0.8 });
+      onFocusHandled && onFocusHandled();
+    }
+  }, [focusSiteId, sites, onFocusHandled]);
 
   const onCrewClick = useCallback(
     (c) => {

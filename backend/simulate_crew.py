@@ -1,100 +1,90 @@
-import math, random, time
-from typing import Optional, Tuple, Dict, List
+#!/usr/bin/env python3
+import math, random, time, requests, threading
 
-def destination_point(lat, lon, bearing_deg, dist_km):
-    """Return lat/lon reached by moving dist_km along bearing from start."""
-    R = 6371.0
-    θ = math.radians(bearing_deg)
-    δ = dist_km / R
+BASE = "http://localhost:8000"
+TICK = (5, 9)  # seconds between updates (randomized)
+STEP_M = (150, 300)  # meters per tick
+SESSION = requests.Session()
+
+def bearing(lat1, lon1, lat2, lon2):
+    φ1, φ2 = math.radians(lat1), math.radians(lat2)
+    Δλ = math.radians(lon2 - lon1)
+    y = math.sin(Δλ) * math.cos(φ2)
+    x = math.cos(φ1) * math.sin(φ2) - math.sin(φ1) * math.cos(φ2) * math.cos(Δλ)
+    θ = math.atan2(y, x)
+    return (math.degrees(θ) + 360) % 360
+
+def destination(lat, lon, brg_deg, dist_m):
+    R = 6371000.0
+    θ = math.radians(brg_deg)
+    δ = dist_m / R
     φ1 = math.radians(lat)
     λ1 = math.radians(lon)
+    φ2 = math.asin(math.sin(φ1)*math.cos(δ) + math.cos(φ1)*math.sin(δ)*math.cos(θ))
+    λ2 = λ1 + math.atan2(math.sin(θ)*math.sin(δ)*math.cos(φ1),
+                         math.cos(δ)-math.sin(φ1)*math.sin(φ2))
+    return (math.degrees(φ2), ((math.degrees(λ2)+540)%360)-180)
 
-    sinφ2 = math.sin(φ1) * math.cos(δ) + math.cos(φ1) * math.sin(δ) * math.cos(θ)
-    φ2 = math.asin(sinφ2)
-    y = math.sin(θ) * math.sin(δ) * math.cos(φ1)
-    x = math.cos(δ) - math.sin(φ1) * sinφ2
-    λ2 = λ1 + math.atan2(y, x)
+def choose_target(sites):
+    prio = [s for s in sites if (s.get("meta") or {}).get("status") in ("critical","warning")]
+    pool = prio or sites
+    return random.choice(pool)
 
-    lat2 = math.degrees(φ2)
-    lon2 = (math.degrees(λ2) + 540) % 360 - 180
-    return lat2, lon2
+def fetch_sites():
+    return SESSION.get(f"{BASE}/sites").json()
 
-class CrewSim:
-    def __init__(self, api, crew_id, name,
-                 speed_kmh=(35, 70),     # faster -> visible movement
-                 pause=(5, 10),
-                 jitter=0.0003,          # ~30m jitter max
-                 follow_workorders=False):
-        self.api = api
-        self.id = crew_id
-        self.name = name
-        self.speed_min, self.speed_max = speed_kmh
-        self.pause_min, self.pause_max = pause
-        self.jitter = jitter
-        self.follow_workorders = follow_workorders
+def fetch_crews():
+    return SESSION.get(f"{BASE}/crew").json()
 
-        self.lat = None
-        self.lon = None
-        self.dest: Optional[Tuple[float, float]] = None
-        self.status = "on_duty"
+def upsert_crew(crew_id, name):
+    SESSION.post(f"{BASE}/crew", json={"id": crew_id, "name": name, "status":"on_duty"})
 
-    # … keep ensure_created and choose_destination as you had …
+def post_position(crew_id, lat, lon, status="on_duty"):
+    SESSION.post(f"{BASE}/crew/position", json={"id": crew_id, "lat": lat, "lon": lon, "status": status})
 
-    def tick(self, sites: Dict[str, Tuple[float, float]], site_ids: List[str]):
-        # initialize near a random site
-        if self.lat is None or self.lon is None:
-            sid = random.choice(site_ids)
-            base_lat, base_lon = sites[sid]
-            self.lat = base_lat + random.uniform(-self.jitter, self.jitter)
-            self.lon = base_lon + random.uniform(-self.jitter, self.jitter)
-            self.choose_destination(sites, site_ids)
+def runner(crew):
+    crew_id = crew["id"]
+    lat = crew.get("last_lat") or 63.096  # default Vaasa-ish
+    lon = crew.get("last_lon") or 21.616
+    target = None
 
-        if self.dest is None:
-            self.choose_destination(sites, site_ids)
+    sites = fetch_sites()
+    if sites:
+        target = choose_target(sites)
 
-        # distance to destination
-        d_km = haversine_km(self.lat, self.lon, self.dest[0], self.dest[1])
-        if d_km < 0.05:  # within 50m -> dwell, then choose next
-            self.status = "in_progress"
-            self.post_position(speed=0.0, heading=None)
-            time.sleep(random.uniform(10, 25))
-            self.status = "on_duty"
-            self.choose_destination(sites, site_ids)
-            return
+    while True:
+        # pick a target if missing or reached (~50 m)
+        if not target or math.hypot(lat - target["lat"], lon - target["lon"]) * 111_000 < 50:
+            target = choose_target(sites)
+        brg = bearing(lat, lon, target["lat"], target["lon"])
 
-        # move a small geodesic step toward the destination
-        dt = random.uniform(self.pause_min, self.pause_max)  # seconds
-        speed = random.uniform(self.speed_min, self.speed_max)  # km/h
-        step_km = speed * (dt / 3600.0)
-        head = bearing_deg(self.lat, self.lon, self.dest[0], self.dest[1])
+        step = random.uniform(*STEP_M)
+        # small random wobble
+        brg += random.uniform(-10, 10)
+        lat, lon = destination(lat, lon, brg, step)
 
-        new_lat, new_lon = destination_point(self.lat, self.lon, head, step_km)
-        # tiny jitter so rounding never collapses steps
-        new_lat += random.uniform(-self.jitter, self.jitter) * 0.2
-        new_lon += random.uniform(-self.jitter, self.jitter) * 0.2
+        post_position(crew_id, lat, lon, status="on_duty")
+        time.sleep(random.uniform(*TICK))
 
-        self.lat, self.lon = new_lat, new_lon
-        self.post_position(speed=speed, heading=head)
+def main():
+    crews = fetch_crews()
+    if not isinstance(crews, list): crews = []
 
-        time.sleep(dt)
+    # Create a few if none exist
+    seed = [{"id":"alex","name":"Alex"},{"id":"lee","name":"Lee"},{"id":"sara","name":"Sara"}]
+    existing_ids = {c["id"] for c in crews}
+    for c in seed:
+        if c["id"] not in existing_ids:
+            upsert_crew(c["id"], c["name"])
+            post_position(c["id"], 63.096, 21.616)
 
-    def post_position(self, speed: float, heading: Optional[float]):
-        try:
-            r = self.api.post(
-                "/crew/position",
-                json={
-                    "crew_id": self.id,
-                    "lat": round(self.lat, 5),   # ~1.1 m precision, enough to see changes
-                    "lon": round(self.lon, 5),
-                    "speed": round(speed, 1) if speed is not None else None,
-                    "heading": round(heading, 0) if heading is not None else None,
-                    "status": self.status,
-                },
-                headers={"x-api-key": self.api.key, "Content-Type": "application/json"},
-            )
-            if not r.ok:
-                print(f"[{self.id}] position failed {r.status_code}: {r.text}")
-            else:
-                print(f"[{self.id}] at ({self.lat:.5f}, {self.lon:.5f}) {self.status}")
-        except Exception as e:
-            print(f"[{self.id}] error posting position: {e}")
+    crews = fetch_crews()
+    for c in crews:
+        threading.Thread(target=runner, args=(c,), daemon=True).start()
+
+    print("Simulator running…")
+    while True:
+        time.sleep(60)
+
+if __name__ == "__main__":
+    main()
