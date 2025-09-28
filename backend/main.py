@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from db import engine, Base
 from routers import sites, assets, workorders, notices, public, crew  # notices optional
+from routers import ingest_scada
+
+
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -20,6 +23,7 @@ app.include_router(workorders.router)
 app.include_router(notices.router)   # remove if not used
 app.include_router(public.router)
 app.include_router(crew.router)
+app.include_router(ingest_scada.router)
 
 @app.on_event("startup")
 async def on_startup():

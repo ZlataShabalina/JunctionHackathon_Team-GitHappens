@@ -123,12 +123,17 @@ export default function MapView({ zones = [], onTruckSelect, onSiteSelect, focus
 
   return (
     <MapContainer
-      center={[63.1, 21.62]}
-      zoom={7}
-      style={{ height: "100%", width: "100%" }}
-      zoomControl={false}
-      whenCreated={(map) => setBbox(boundsToBbox(map.getBounds()))}
-    >
+  center={[63.1, 21.62]}
+  zoom={7}
+  style={{ height: "100%", width: "100%" }}
+  zoomControl={false}
+  whenReady={(e) => {
+    const map = e.target;          // Leaflet map instance
+    mapRef.current = map;
+    setBbox(boundsToBbox(map.getBounds()));
+  }}
+>
+
       <ViewportWatcher onBbox={setBbox} />
       <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 

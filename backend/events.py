@@ -1,5 +1,29 @@
 import asyncio
 from typing import AsyncIterator, Dict, Any, List, Optional
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+
+router = APIRouter(prefix="/ws", tags=["ws"])
+
+_connections: dict[str, set[WebSocket]] = {}
+
+@router.websocket("/crew/{crew_id}")
+async def ws_crew(websocket: WebSocket, crew_id: str):
+    await websocket.accept()
+    _connections.setdefault(crew_id, set()).add(websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # keepalive (ignore)
+    except WebSocketDisconnect:
+        _connections[crew_id].discard(websocket)
+
+async def ws_push_to_crew(crew_id: str, payload: dict):
+    for ws in list(_connections.get(crew_id, ())):
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            _connections[crew_id].discard(ws)
+
 
 class EventBroker:
     def __init__(self) -> None:
@@ -29,3 +53,4 @@ class EventBroker:
                 pass
 
 broker = EventBroker()
+
