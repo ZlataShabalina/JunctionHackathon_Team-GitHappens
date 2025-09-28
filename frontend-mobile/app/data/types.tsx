@@ -1,77 +1,230 @@
-// Minimal types for frontend-only operation
-// Designed for easy backend integration later
+// Types matching PowerPulse backend API
+export type WorkOrderStatus = 'scheduled' | 'assigned' | 'in_progress' | 'on_hold' | 'completed' | 'canceled';
+export type WorkOrderPriority = 'low' | 'normal' | 'high';
+export type AssetStatus = 'operational' | 'maintenance_due' | 'maintenance' | 'fault' | 'standby';
 
-export type TaskStatus = 'pending' | 'in-progress' | 'completed' | 'overdue';
-export type AssetStatus = 'operational' | 'maintenance' | 'offline' | 'critical';
-export type Priority = 'low' | 'medium' | 'high' | 'critical';
-
+// Backend API types
 export interface Site {
   id: string;
   name: string;
   lat: number;
-  long: number;
-  address: string;
-  meta: any;
+  lon: number;
+  address?: string | null;
+  meta?: Record<string, unknown> | null;
 }
 
 export interface Asset {
   id: string;
-  name: string;
-  type: string;
+  site_id?: string | null;
+  name?: string | null;
+  type?: string | null;
   status: AssetStatus;
-  siteId: string;
-  lastMaintenance?: string;
+  last_seen_at?: string | null;
+  meta?: Record<string, unknown> | null;
 }
 
-export interface Task {
-  createdDate: string | number | Date;
-  id: string;
+export interface WorkOrder {
+  id: number;
+  site_id: string;
+  asset_id?: string | null;
   title: string;
-  assetId: string;
-  siteId: string;
-  status: TaskStatus;
-  priority: Priority;
-  dueDate: string;
-  assignee?: string;
+  description?: string | null;
+  priority: WorkOrderPriority;
+  scheduled_start?: string | null;
+  scheduled_end?: string | null;
+  status: WorkOrderStatus;
+  assigned_to?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-export const mockAssets: Asset[] = [
-  { id: 'a1', name: 'Generator Unit 1', type: 'Generator', status: 'operational', siteId: '1', lastMaintenance: '2024-08-15' },
-  { id: 'a2', name: 'Cooling Pump A2', type: 'Pump', status: 'maintenance', siteId: '1', lastMaintenance: '2024-09-01' },
-  { id: 'a3', name: 'Main Transformer', type: 'Transformer', status: 'operational', siteId: '1' },
-  { id: 'a4', name: 'Backup Generator', type: 'Generator', status: 'critical', siteId: '2', lastMaintenance: '2024-07-20' },
-  { id: 'a5', name: 'Water Pump B1', type: 'Pump', status: 'operational', siteId: '2' },
-  { id: 'a6', name: 'Control Panel', type: 'Electrical', status: 'offline', siteId: '3', lastMaintenance: '2024-06-10' }
-];
+export interface Notice {
+  id: number;
+  site_id?: string | null;
+  asset_id?: string | null;
+  kind: 'planned' | 'active' | 'done';
+  title: string;
+  description?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  created_at: string;
+}
 
-export const mockTasks: Task[] = [
-  { id: 't1', title: 'Generator inspection', assetId: 'a1', siteId: '1', status: 'in-progress', priority: 'high', dueDate: '2024-10-15', assignee: 'John M.', createdDate: '2024-09-15' },
-  { id: 't2', title: 'Replace pump bearings', assetId: 'a2', siteId: '1', status: 'pending', priority: 'critical', dueDate: '2024-10-08', assignee: 'Sarah C.', createdDate: '2024-09-10' },
-  { id: 't3', title: 'Transformer oil test', assetId: 'a3', siteId: '1', status: 'completed', priority: 'medium', dueDate: '2024-09-30', createdDate: '2024-09-01' },
-  { id: 't4', title: 'Emergency repair', assetId: 'a4', siteId: '2', status: 'overdue', priority: 'critical', dueDate: '2024-09-25', assignee: 'Mike J.', createdDate: '2024-09-20' }
-];
+// API Configuration
+export const API_BASE_URL = 'http://localhost:8000';
 
-// Helper functions for data lookups
+// API Service class
+class ApiService {
+  private baseUrl: string;
 
-export const getAssetById = (id: string): Asset | undefined => 
-  mockAssets.find(asset => asset.id === id);
+  constructor(baseUrl: string = API_BASE_URL) {
+    this.baseUrl = baseUrl;
+  }
 
-export const getTaskById = (id: string): Task | undefined => 
-  mockTasks.find(task => task.id === id);
+  private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+      ...options,
+    });
 
-export const getAssetsBySiteId = (siteId: string): Asset[] => 
-  mockAssets.filter(asset => asset.siteId === siteId);
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    }
 
-export const getTasksByStatus = (status?: TaskStatus): Task[] => 
-  status ? mockTasks.filter(task => task.status === status) : mockTasks;
+    return response.json();
+  }
 
-export const getTasksCountBySiteId = (siteId: string): { total: number; urgent: number } => {
-  const siteTasks = mockTasks.filter(task => task.siteId === siteId);
-  const urgentTasks = siteTasks.filter(task => 
-    task.status === 'overdue' || (task.priority === 'critical' || task.priority === 'high')
-  );
-  return {
-    total: siteTasks.length,
-    urgent: urgentTasks.length
-  };
+  // Sites
+  async getSites(bbox?: string): Promise<Site[]> {
+    const params = bbox ? `?bbox=${encodeURIComponent(bbox)}` : '';
+    return this.request<Site[]>(`/sites${params}`);
+  }
+
+  async getSite(siteId: string): Promise<Site> {
+    return this.request<Site>(`/sites/${siteId}`);
+  }
+
+  async getSiteAssets(siteId: string): Promise<{ items: Asset[] }> {
+    return this.request<{ items: Asset[] }>(`/sites/${siteId}/assets`);
+  }
+
+  // Assets
+  async getAssets(params?: { site_id?: string; status?: string; type?: string }): Promise<{ items: Asset[] }> {
+    const searchParams = new URLSearchParams();
+    if (params?.site_id) searchParams.append('site_id', params.site_id);
+    if (params?.status) searchParams.append('status', params.status);
+    if (params?.type) searchParams.append('type', params.type);
+    
+    const queryString = searchParams.toString();
+    const url = queryString ? `/assets?${queryString}` : '/assets';
+    return this.request<{ items: Asset[] }>(url);
+  }
+
+  async getAsset(assetId: string): Promise<Asset> {
+    return this.request<Asset>(`/assets/${assetId}`);
+  }
+
+  async updateAsset(assetId: string, updates: Partial<Asset>): Promise<Asset> {
+    return this.request<Asset>(`/assets/${assetId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  // Work Orders
+  async getWorkOrders(params?: { site_id?: string; status?: string; assigned_to?: string }): Promise<{ items: WorkOrder[] }> {
+    const searchParams = new URLSearchParams();
+    if (params?.site_id) searchParams.append('site_id', params.site_id);
+    if (params?.status) searchParams.append('status', params.status);
+    if (params?.assigned_to) searchParams.append('assigned_to', params.assigned_to);
+    
+    const queryString = searchParams.toString();
+    const url = queryString ? `/workorders?${queryString}` : '/workorders';
+    return this.request<{ items: WorkOrder[] }>(url);
+  }
+
+  async getWorkOrder(workOrderId: number): Promise<WorkOrder> {
+    return this.request<WorkOrder>(`/workorders/${workOrderId}`);
+  }
+
+  async updateWorkOrder(workOrderId: number, updates: Partial<WorkOrder>): Promise<WorkOrder> {
+    return this.request<WorkOrder>(`/workorders/${workOrderId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async createWorkOrder(workOrder: Omit<WorkOrder, 'id' | 'created_at' | 'updated_at'>): Promise<WorkOrder> {
+    return this.request<WorkOrder>('/workorders', {
+      method: 'POST',
+      body: JSON.stringify(workOrder),
+    });
+  }
+
+  // Notices
+  async getNotices(params?: { site_id?: string; asset_id?: string; kind?: string }): Promise<{ items: Notice[] }> {
+    const searchParams = new URLSearchParams();
+    if (params?.site_id) searchParams.append('site_id', params.site_id);
+    if (params?.asset_id) searchParams.append('asset_id', params.asset_id);
+    if (params?.kind) searchParams.append('kind', params.kind);
+    
+    const queryString = searchParams.toString();
+    const url = queryString ? `/notices?${queryString}` : '/notices';
+    return this.request<{ items: Notice[] }>(url);
+  }
+
+  // Feedback
+  async submitFeedback(feedback: {
+    site_id?: string;
+    asset_id?: string;
+    message: string;
+    contact?: string;
+    rating?: number;
+  }): Promise<{ ok: boolean; id: number }> {
+    return this.request<{ ok: boolean; id: number }>('/feedback', {
+      method: 'POST',
+      body: JSON.stringify(feedback),
+    });
+  }
+}
+
+export const apiService = new ApiService();
+
+// Helper functions for UI
+export const getStatusColor = (status: AssetStatus | WorkOrderStatus): string => {
+  switch (status) {
+    case 'operational':
+    case 'completed':
+      return '#059669';
+    case 'maintenance_due':
+    case 'assigned':
+    case 'scheduled':
+      return '#d97706';
+    case 'maintenance':
+    case 'in_progress':
+      return '#2563eb';
+    case 'fault':
+    case 'on_hold':
+      return '#dc2626';
+    case 'standby':
+    case 'canceled':
+      return '#64748b';
+    default:
+      return '#64748b';
+  }
+};
+
+export const getPriorityColor = (priority: WorkOrderPriority): string => {
+  switch (priority) {
+    case 'high': return '#dc2626';
+    case 'normal': return '#2563eb';
+    case 'low': return '#059669';
+    default: return '#64748b';
+  }
+};
+
+export const formatDate = (dateString: string): string => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffTime = date.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Tomorrow';
+  if (diffDays === -1) return 'Yesterday';
+  if (diffDays < 0) return `${Math.abs(diffDays)} days overdue`;
+  if (diffDays <= 7) return `In ${diffDays} days`;
+  return date.toLocaleDateString();
+};
+
+export const getStatusText = (status: AssetStatus | WorkOrderStatus): string => {
+  switch (status) {
+    case 'maintenance_due': return 'Maintenance Due';
+    case 'in_progress': return 'In Progress';
+    case 'on_hold': return 'On Hold';
+    default: return status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ');
+  }
 };
