@@ -2,9 +2,15 @@ import React from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { mockSites, Site } from './data/types';
+import axios from 'axios';
 
 export default function SitesScreen() {
   const router = useRouter();
+  const [sites, setSites] = React.useState<Site[]>([]);
+
+  axios.get('http://localhost:8000/api/sites')
+    .then(response => setSites(response.data))
+    .catch(error => console.error(error));
 
   const renderSite = ({ item }: { item: Site }) => (
     <TouchableOpacity

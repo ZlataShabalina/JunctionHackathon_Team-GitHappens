@@ -8,9 +8,10 @@ export type Priority = 'low' | 'medium' | 'high' | 'critical';
 export interface Site {
   id: string;
   name: string;
-  location: string;
-  assetCount: number;
-  coordinates: { latitude: number; longitude: number };
+  lat: number;
+  long: number;
+  address: string;
+  meta: any;
 }
 
 export interface Asset {
@@ -34,13 +35,6 @@ export interface Task {
   assignee?: string;
 }
 
-// Minimal mock data - just enough for UI functionality
-export const mockSites: Site[] = [
-  { id: '1', name: 'Central Station', location: 'Downtown', assetCount: 5, coordinates: { latitude: 40.7128, longitude: -74.0060 } },
-  { id: '2', name: 'North Plant', location: 'Industrial District', assetCount: 8, coordinates: { latitude: 40.7589, longitude: -73.9851 } },
-  { id: '3', name: 'East Facility', location: 'Riverside', assetCount: 3, coordinates: { latitude: 40.6782, longitude: -73.9442 } }
-];
-
 export const mockAssets: Asset[] = [
   { id: 'a1', name: 'Generator Unit 1', type: 'Generator', status: 'operational', siteId: '1', lastMaintenance: '2024-08-15' },
   { id: 'a2', name: 'Cooling Pump A2', type: 'Pump', status: 'maintenance', siteId: '1', lastMaintenance: '2024-09-01' },
@@ -58,8 +52,6 @@ export const mockTasks: Task[] = [
 ];
 
 // Helper functions for data lookups
-export const getSiteById = (id: string): Site | undefined => 
-  mockSites.find(site => site.id === id);
 
 export const getAssetById = (id: string): Asset | undefined => 
   mockAssets.find(asset => asset.id === id);
@@ -72,14 +64,6 @@ export const getAssetsBySiteId = (siteId: string): Asset[] =>
 
 export const getTasksByStatus = (status?: TaskStatus): Task[] => 
   status ? mockTasks.filter(task => task.status === status) : mockTasks;
-
-export const getActiveSites = (): Site[] => {
-  const activeSiteIds = mockTasks
-    .filter(task => task.status === 'pending' || task.status === 'in-progress' || task.status === 'overdue')
-    .map(task => task.siteId);
-  const uniqueSiteIds = [...new Set(activeSiteIds)];
-  return mockSites.filter(site => uniqueSiteIds.includes(site.id));
-};
 
 export const getTasksCountBySiteId = (siteId: string): { total: number; urgent: number } => {
   const siteTasks = mockTasks.filter(task => task.siteId === siteId);
