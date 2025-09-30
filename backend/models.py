@@ -7,8 +7,6 @@ from db import Base
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
-
-# --- NEW ---
 class Crew(Base):
     __tablename__ = "crew"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)  # e.g. "alex" or email

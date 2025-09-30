@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_session
-from models import Notice  # we only rely on Notice (you already have it)
+from models import Notice  # we only rely on Notice
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 

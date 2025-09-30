@@ -2,8 +2,6 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
-
-# --- NEW ---
 class CrewCreate(BaseModel):
     id: str
     name: Optional[str] = None
